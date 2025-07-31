@@ -5,8 +5,6 @@ import { Cart } from "../models/cart.model.js";
 
 export const addItemToCart = async (req, res) => {
   try {
-    const isUser = req.user.role === 'user';
-    if(!isUser) return res.status(403).json({message:'Unauthorized'});
     
     const { userId, productId, quantity, price } = req.body;
 

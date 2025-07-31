@@ -233,12 +233,6 @@ export const refreshToken = async (req, res) => {
   try {
     const decoded = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET);
 
-    const newAccessToken = jwt.sign(
-      { id: decoded.id, role: decoded.role },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.ACCESS_EXPIRES_IN || "30s" }
-    );
-
     const user = await User.findById(decoded.id).select("-password");
 
     if (!user) return res.status(401).json({ message: "User not found" });
@@ -246,6 +240,8 @@ export const refreshToken = async (req, res) => {
     if (user.status === "Inactive") {
       return res.status(401).json({ message: "User is Inactive" });
     }
+
+    const newAccessToken = generateAccessToken(user);
 
     res.status(200).json({ accessToken: newAccessToken, user: user });
   } catch (err) {
