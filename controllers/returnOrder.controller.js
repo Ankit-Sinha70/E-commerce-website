@@ -122,6 +122,23 @@ export const cancelReturnRequest = async (req, res) => {
     }
 }
 
+export const getUserReturnRequest = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        const returnRequests = await ReturnOrder.find({ user: userId });
+
+        if (!returnRequests || returnRequests.length === 0) {
+            return res.status(200).json({ message: 'No return requests found', returnRequests: [] });
+        }
+
+        res.status(200).json({ returnRequests });
+
+    } catch (error) {
+        res.status(500).json({ message: error.message || 'Internal server error' });
+    }
+}
+
 export const getAllReturnRequestOrders = async (req, res) => {
     const { status } = req.query;
 
@@ -133,6 +150,8 @@ export const getAllReturnRequestOrders = async (req, res) => {
 
     try {
         const returnRequest = await ReturnOrder.find(filter)
+            .populate('user', '_id name email phoneNumber')
+            .populate('orderId', '_id orderId totalAmount status items deliveredAt')
             .populate('pickUpAgent', '_id name email phoneNumber');
 
         if (!returnRequest || returnRequest.length === 0) {
@@ -160,10 +179,6 @@ export const updateReturnRequestStatus = async (req, res) => {
         const order = await Order.findById(returnOrder.orderId);
         if (!order) {
             return res.status(404).json({ message: 'order not found' });
-        }
-
-        if (returnOrder.status !== 'Requested') {
-            return res.status(400).json({ message: 'No return request found for this order.' });
         }
 
         if (status === 'Approved') {

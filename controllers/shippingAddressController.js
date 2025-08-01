@@ -67,7 +67,6 @@ const createShippingAddress = async (req, res) => {
 const getShippingAddresses = async (req, res) => {
   try {
     const userId = req.user.id;
-    console.log("userId", userId);
 
     const addresses = await ShippingAddress.find({ userId }).sort({
       isDefault: -1,
