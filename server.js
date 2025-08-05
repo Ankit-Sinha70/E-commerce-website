@@ -10,7 +10,7 @@ dotenv.config({
     path:'.env'
 })
 const port = process.env.PORT || 2000;
-const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+const corsOrigin = process.env.CORS_ORIGIN?.split(",");
 
 export const userSocketMap = new Map();
 
@@ -18,7 +18,7 @@ export const server = http.createServer(app);
 
 export const io = new Server(server, {
     cors: {
-        origin: frontendUrl,
+        origin: corsOrigin,
     }
 })
 

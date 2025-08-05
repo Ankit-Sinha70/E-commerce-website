@@ -24,8 +24,9 @@ const app = express()
 
 app.use("/api/payment/stripe-webhook", express.raw({ type: "application/json" }), stripeWebhookHandler);
 
+const corsOrigin = process.env.CORS_ORIGIN?.split(",");
 app.use(cors({
-    origin: "http://localhost:5173",
+    origin: corsOrigin,
     credentials: true
 }))
 app.use(cookieParser());
