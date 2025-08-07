@@ -10,6 +10,7 @@ import paymentRoutes from "./routes/payment.route.js"
 import receiptRoutes from "./routes/receipt.route.js"
 import orderRoutes from "./routes/order.route.js"
 import deliveryRoutes from "./routes/delivery.route.js"
+import productReviewRoutes from "./routes/ProductReview.route.js"
 
 import wishListRoutes from "./routes/wishList.route.js"
 import shippingAddressRoutes from "./routes/shippingAddressRoutes.js"
@@ -38,6 +39,7 @@ app.use('/api/product', productRoutes);
 app.use('/api/category', categoryRoutes);
 app.use('/api/user', userRoutes)
 app.use('/api/productlist', productlistRoutes)
+app.use('/api/review', productReviewRoutes);
 app.use('/api/cart', protect, cartRoutes)
 app.use('/api/contact', emailRoutes);
 app.use('/api', chatRoutes)

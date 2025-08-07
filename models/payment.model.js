@@ -22,11 +22,15 @@ const paymentSchema = new Schema({
         enum: ['Pending', 'Paid', 'Failed', 'Refunded'],
         default: 'Pending'
     },
-    paymentMethod: { type: String }, // card, upi
-    gateway: { type: String }, // stripe, razorpay
+    paymentMethod: { type: String }, 
+    gateway: { type: String }, 
     sessionId: { type: String },
 
     receiptUrl: { type: String },
+    returnOrderId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'ReturnOrder',
+    },
     refundId: { type: String },
     refundedAmount: { type: Number, default: 0 },
 
