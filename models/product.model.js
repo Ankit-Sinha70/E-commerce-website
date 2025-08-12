@@ -28,7 +28,7 @@ const productSchema = new Schema({
     },
     ratings: {
       type: Number,
-      default: 5,
+      default: 0,
     },
     numReviews: {
       type: Number,

@@ -2,14 +2,26 @@ import { Notification } from "../models/notification.model.js";
 
 export const getNotifications = async (req, res) => {
     const {userId} = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    
     try{
-        const notifications = await Notification.find({userId}).sort({createdAt: -1});
-        if(!notifications.length){
-            return res.status(200).json({message: "No notifications found"});
+        const totalItems = await Notification.countDocuments({userId});
+        if(totalItems === 0){
+            return res.status(404).json({success:false, message: "No notifications found"});
         }
-        res.status(200).json({success:true, notifications});
+        const notifications = await Notification.find({userId}).skip(skip).limit(limit).sort({createdAt: -1});
+        res.status(200).json({
+            page,
+            limit,
+            totalPages: Math.ceil(totalItems / limit),
+            totalItems,
+            success:true, 
+            notifications});
     }catch(error){
-        console.error('Error fetching notifications:', error);
+        // console.error('Error fetching notifications:', error);
         res.status(500).json({success:false, message: error.message});
     }
 }

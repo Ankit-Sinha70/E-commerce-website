@@ -6,14 +6,15 @@ import {
   clearWishList,
   mergeWishListItems
 } from '../controllers/wishList.controller.js';
+import { protect } from '../middlewares/authmiddleware.js';
 const router = express.Router();
-router.post('/addToWishlist', addItemToWishList);
+router.post('/addToWishlist', protect, addItemToWishList);
 
-router.get('/wishlist', getUserWishList);
+router.get('/wishlist', protect, getUserWishList);
 
-router.delete('/remove/:id', removeItemFromWishList);
+router.delete('/remove/:id', protect, removeItemFromWishList);
 
-router.delete('/clear', clearWishList);
+router.delete('/clear', protect, clearWishList);
 
 router.post('/merge', mergeWishListItems);
 export default router;

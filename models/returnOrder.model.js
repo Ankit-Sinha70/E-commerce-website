@@ -10,7 +10,8 @@ const ReturnOrderSchema = new Schema({
     },
     user: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
+        ref: 'User',
+        required: true,
     },
     reason: { type: String, required: true },
     comment: { type: String, required: true },

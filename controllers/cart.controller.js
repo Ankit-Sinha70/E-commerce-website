@@ -71,7 +71,6 @@ export const removeCartItem = async (req, res) => {
     if (!cart) {
       return res.status(404).json({ message: 'Cart not found' });
     }
-    console.log(cart);
     
     res.json({ message: 'Cart item removed', cart });
   } catch (error) {

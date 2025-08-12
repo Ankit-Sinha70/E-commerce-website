@@ -4,6 +4,8 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { createTransport } from "nodemailer";
 import { cloudinary } from "../utils/cloudinary.js";
+import { Order } from "../models/order.model.js";
+import { Payment } from "../models/payment.model.js";
 
 //create user
 export const register = async (req, res) => {
@@ -20,6 +22,28 @@ export const register = async (req, res) => {
     const user = new User({ name, email, password, address });
     const savedUser = await user.save();
     const { password: _, ...response } = savedUser.toObject();
+
+    await Order.updateMany(
+      {
+        email: savedUser.email,
+        $or: [
+          { user: { $exists: false } },
+          { user: null }
+        ]
+      },
+      { $set: { user: savedUser._id } }
+    );
+
+    await Payment.updateMany(
+      {
+        email: savedUser.email,
+        $or: [
+          { user: { $exists: false } },
+          { user: null }
+        ]
+      },
+      { $set: { userId: savedUser._id } }
+    );
 
     res
       .status(201)
@@ -251,18 +275,38 @@ export const refreshToken = async (req, res) => {
 };
 
 export const getAllUsers = async (req, res) => {
+  const { name, status } = req.query;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
   try {
-    const { name } = req.query;
+
     const filter = { role: "user" };
     if (name) {
       filter.name = { $regex: name, $options: "i" };
     }
+
+    if (status) {
+      filter.status = status;
+    }
+
+    const totalItems = await User.countDocuments(filter);
+    if (totalItems === 0) {
+      return res.status(404).json({ message: "No users found" });
+    }
     const users = await User.find(filter)
       .select("-password -refreshtoken")
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 })
       .lean();
     res.status(200).json({
+      page,
+      limit,
+      totalPages: Math.ceil(totalItems / limit),
+      totalItems,
       success: true,
-      message: users.length ? "Users fetched successfully" : "No users found",
+      message: "Users fetched successfully",
       data: users,
     });
   } catch (error) {
@@ -338,7 +382,7 @@ export const setStatusActive = async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) return res.status(401).json({ message: "User not found" });
 
-    if(user.role !== 'user'){
+    if (user.role !== 'user') {
       return res.status(200).json({ message: "Unauthorized" });
     }
 

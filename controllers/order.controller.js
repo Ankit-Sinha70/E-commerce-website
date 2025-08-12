@@ -1,16 +1,16 @@
+import moment from "moment";
 import { Order } from "../models/order.model.js";
 import { orderUpdatedNotification } from "../utils/notification.js";
+import { User } from "../models/user.model.js";
 
 export const createOrder = async (req, res) => {
   try {
-    const {
+    let {
       userId,
-      guestId,
       email,
       items,
       shippingAddress,
       totalAmount,
-      isGuest = false,
     } = req.body;
 
 
@@ -18,10 +18,13 @@ export const createOrder = async (req, res) => {
       return res.status(400).json({ message: "Missing required order fields" });
     }
 
+    if (!userId) {
+      const user = await User.findOne({ email });
+      userId = user?._id || null;
+    }
+
     const order = await Order.create({
-      userId,
-      guestId: isGuest ? guestId : null,
-      isGuest,
+      user: userId,
       email,
       items,
       shippingAddress,
@@ -57,6 +60,10 @@ export const getOrderById = async (req, res) => {
 export const getOrder = async (req, res) => {
   try {
     const { name, status, date } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
     const filter = {};
 
     // Filter by status
@@ -73,7 +80,11 @@ export const getOrder = async (req, res) => {
     }
 
     // Always use find + populate
-    let orders = await Order.find(filter).populate('user', 'name email phoneNumber');
+    const totalItems = await Order.countDocuments(filter);
+    if (totalItems === 0) {
+      return res.status(200).json({ message: "No orders found" });
+    }
+    let orders = await Order.find(filter).populate('user', 'name email phoneNumber').skip(skip).limit(limit).sort({ createdAt: -1 });
 
     // If name filter is provided, filter in-memory after population
     if (name) {
@@ -83,7 +94,13 @@ export const getOrder = async (req, res) => {
       );
     }
 
-    res.status(200).json(orders);
+    res.status(200).json({
+      page,
+      limit,
+      totalPages: Math.ceil(totalItems / limit),
+      totalItems,
+      orders
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -93,13 +110,23 @@ export const getOrder = async (req, res) => {
 export const getUserOrders = async (req, res) => {
   try {
     const { userId } = req.params;
-    const orders = await Order.find({ user: userId }).populate('deliveryAgent', 'name email phoneNumber');
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
 
-    if (!orders || orders.length === 0) {
-      return res.status(200).json({ message: 'No orders found for this user', orders: [] });
+    const totalItems = await Order.countDocuments({ user: userId });
+    if (totalItems === 0) {
+      return res.status(404).json({ message: 'No orders found for this user', orders: [] });
     }
+    const orders = await Order.find({ user: userId }).populate('deliveryAgent', 'name email phoneNumber').skip(skip).limit(limit).sort({ createdAt: -1 });
 
-    res.status(200).json({ orders }); // createdAt, shippedAt, deliveredAt will be included
+    res.status(200).json({
+      page,
+      limit,
+      totalPages: Math.ceil(totalItems / limit),
+      totalItems,
+      orders
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -110,12 +137,11 @@ export const getUserOrders = async (req, res) => {
 export const updateOrder = async (req, res) => {
   try {
     const { id } = req.params;
-    const io = req.app.get('socketio');
+
     const updatedOrder = await Order.findByIdAndUpdate(id, req.body, { new: true });
     if (!updatedOrder) {
       return res.status(404).json({ message: 'Order not found' });
     }
-    io.to(id).emit('orderStatusUpdate', updatedOrder)
     res.status(200).json({ message: 'Order updated successfully', order: updatedOrder });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -159,12 +185,6 @@ export const updateOrderStatus = async (req, res) => {
     order.status = status;
     await order.save();
 
-    // Optional: Send socket event if using real-time tracking
-    const io = req.app.get('socketio');
-    if (io) {
-      io.to(order._id.toString()).emit('orderStatusUpdate', order);
-    }
-
     // Optional: Notify registered user
     if (order.user) {
       await orderUpdatedNotification(order.user, order._id, status);
@@ -178,6 +198,93 @@ export const updateOrderStatus = async (req, res) => {
 };
 
 
+export const cancelOrder = async (req, res) => {
+  const id = req.params.orderId;
+
+  try {
+    const order = await Order.findById(id);
+
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" })
+    }
+
+    if (order.status === "Cancelled") {
+      return res.status(201).json({ message: "Order already Cancelled" })
+    }
+
+    if (order.status === "Shipped" || order.status === "Delivered" || order.status === "Returned") {
+      return res.status(400).json({ message: `Order cannot be Cancelled after it has been ${order.status}.` });
+    }
+
+    order.status = "Cancelled";
+    order.createdAt = new Date();
+    await order.save();
+
+
+    if (order.user) {
+      await orderUpdatedNotification(order.user, order._id, "Cancelled");
+    }
+
+    res.status(200).json({ message: 'Order cancelled successfully', order });
+  } catch (error) {
+    res.status(500).json({ message: error.message || "Error in Cancelling Order." });
+  }
+
+}
+
+export const getCancelledOrders = async (req, res) => {
+  try {
+    const { email, refundStatus, date } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const filter = {
+      status: "Cancelled"
+    };
+
+    if (refundStatus) {
+      if (['Pending', 'Initiated', 'Succeeded', 'Failed'].includes(refundStatus)) {
+        filter.refundStatus = refundStatus;
+      }
+    } else {
+      filter.refundStatus = "Pending";
+    }
+
+    if (date) {
+      const start = new Date(date);
+      const end = new Date(date);
+      end.setDate(end.getDate() + 1);
+      filter.cancelledAt = { $gte: start, $lt: end };
+    }
+
+    if (email) {
+      filter.email = { $regex: email, $options: 'i' };
+    }
+
+    const totalItems = await Order.countDocuments(filter);
+    if (totalItems === 0) {
+      return res.status(404).json({ message: 'No cancelled orders found', cancelledOrders: [] });
+    }
+
+    const cancelledOrders = await Order.find(filter)
+      .populate('user', 'name email phoneNumber')
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 });
+
+
+    res.status(200).json({
+      page,
+      limit,
+      totalPages: Math.ceil(totalItems / limit),
+      totalItems,
+      cancelledOrders
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+}
 
 
 export const deleteOrder = async (req, res) => {
@@ -214,153 +321,62 @@ export const trackOrder = async (req, res) => {
   }
 };
 
-
-export const returnOrderRequest = async (req, res) => {
+// ✅ Get recent orders for Admin Dashboard
+export const getRecentOrders = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { reason, comment } = req.body;
+    const recentOrders = await Order.find()
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .populate("user", "name email") // optional: include user info
+      .select("orderId status totalAmount createdAt");
 
-    if (!reason || !comment) {
-      return res.status(400).json({ message: 'Reason and comment are required' });
-    }
-
-    const order = await Order.findById(id);
-
-    if (!order) {
-      return res.status(404).json({ message: 'Order not found' });
-    }
-
-    const orderDeliveredTime = new Date(order.deliveredAt);
-    const currentTime = new Date();
-    const twentyFourHours = 24 * 60 * 60 * 1000;
-
-    if (currentTime.getTime() - orderDeliveredTime.getTime() > twentyFourHours) {
-      return res.status(400).json({ message: 'Unable to place return request. The 24-hour return window has passed.' });
-    }
-
-    // Initialize returnRequest object if it doesn't exist
-    if (!order.returnRequest) {
-      order.returnRequest = {};
-    }
-
-    order.returnRequest.isRequested = true;
-    order.returnRequest.reason = reason;
-    order.returnRequest.comment = comment;
-    order.returnRequest.status = "Requested";
-    order.returnRequest.requestedAt = new Date();
-
-    if (req.file) {
-      const imageUrl = req.file.path;
-      order.returnRequest.imageUrl = imageUrl;
-    }
-
-    await order.save();
-
-    res.status(200).json({ message: 'Return request placed successfully.', order });
+    res.status(200).json({ success: true, orders: recentOrders });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
 
-export const cancelReturnRequest = async (req, res) => {
+export const getTotalRevenue = async (req, res) => {
   try {
-    const { id } = req.params;
-    
-    const order = await Order.findById(id);
-    if (!order) {
-      return res.status(404).json({ message: 'Order not found' });
-    }
+    const deliveredOrders = await Order.find({ status: 'Delivered' });
 
-    if(!order.returnRequest.isRequested) {
-      return res.status(400).json({ message: 'No return request found for this order.' });
-    }
+    const totalRevenue = deliveredOrders.reduce(
+      (sum, order) => sum + (order.totalAmount || 0),
+      0
+    );
 
-    if(order.returnRequest.status === 'Picked' || order.returnRequest.status === 'Refunded') {
-      return res.status(400).json({ message: 'Return request cannot be cancelled after it has been picked or refunded.' });
-    }
-
-    if(order.returnRequest.status === 'Cancelled') {
-      return res.status(400).json({ message: 'Return request is already cancelled.' });
-    }
-
-    order.returnRequest.status = 'Cancelled';
-    order.returnRequest.cancelledAt = new Date();
-    await order.save();
-
-    res.status(200).json({ message: 'Return request cancelled successfully', order });
+    res.status(200).json({ totalRevenue });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: 'Error fetching revenue', error });
   }
-}
+};
 
-export const getAllReturnRequestOrders = async (req, res) => {
-  const { status } = req.query;
 
-  let filter = {
-    "returnRequest.isRequested": true,
-  };
-  
-  if (status) {
-    filter["returnRequest.status"] = new RegExp(`^${status}$`, 'i');
-  }
-
+export const getSalesOverview = async (req, res) => {
   try {
-    const returnRequest = await Order.find(filter)
-    .populate('user', 'name email phoneNumber')
-    .populate('returnRequest.pickUpAgent', '_id name email phoneNumber');
+    const salesData = [];
 
-    if (!returnRequest || returnRequest.length === 0) {
-      return res.status(200).json({ message: 'No return requests found', returnRequest: [] });
+    for (let i = 5; i >= 0; i--) {
+      const start = moment().subtract(i, 'months').startOf('month').toDate();
+      const end = moment().subtract(i, 'months').endOf('month').toDate();
+      const label = moment(start).format('MMM YYYY');
+
+      const orders = await Order.find({
+        status: 'Delivered',
+        createdAt: { $gte: start, $lte: end },
+      });
+
+      const totalSales = orders.reduce(
+        (sum, order) => sum + (order.totalAmount || 0),
+        0
+      );
+
+      salesData.push({ label, totalSales });
     }
 
-    res.status(200).json({ returnRequest });
+    res.status(200).json(salesData);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ message: 'Error fetching sales overview', error });
   }
-}
-
-
-export const updateReturnRequestStatus = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-
-    const order = await Order.findById(id);
-
-    if (!order) { 
-      return res.status(404).json({ message: 'Order not found' });
-    }
-
-    if(!order.returnRequest.isRequested) {
-      return res.status(400).json({ message: 'No return request found for this order.' });
-    }
-
-    if(status === 'Approved') {
-      order.returnRequest.status = 'Approved';
-      order.returnRequest.approvedAt = new Date();
-    } else if(status === 'Rejected') {
-      order.returnRequest.status = 'Rejected';
-      order.returnRequest.rejectedAt = new Date();
-    }else if(status === 'Picked') {
-      order.returnRequest.status = 'Picked';
-      order.returnRequest.pickedAt = new Date();
-      order.status = 'Returned';
-    }else if(status === 'Refunded') {
-      order.returnRequest.status = 'Refunded';
-      order.returnRequest.refundedAt = new Date();
-      order.status = 'Returned';
-    }else if(status === 'Cancelled') {
-      order.returnRequest.status = 'Cancelled';
-      order.returnRequest.cancelledAt = new Date();
-    }else{
-      return res.status(400).json({ message: 'Invalid status' });
-    }
-
-    await order.save();
-    res.status(200).json({ message: 'Return request status updated successfully', order });
-
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-}
+};

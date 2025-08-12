@@ -32,24 +32,31 @@ export const addItemToWishList = async (req, res) => {
 };
 // Get user's wishlist
 export const getUserWishList = async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "Not authorized" });
-  }
+  const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
 
-  const token = authHeader.split(" ")[1];
+    try {
+      const userId = req.user.id;
+      const totalItems = await Wish.countDocuments({ user: userId });
+      if (totalItems === 0) {
+        return res.status(404).json({ message: "Wishlist not found." });
+      }
 
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const userId = decoded.id;
+      const wishList = await Wish.findOne({ user: userId })
+        .populate("products")
+        .skip(skip)
+        .limit(limit)
+        .lean();
 
-    const wishList = await Wish.findOne({ user: userId }).populate("products");
-
-    if (!wishList) {
-      return res.status(404).json({ message: "Wishlist not found." });
-    }
-
-    res.status(200).json(wishList);
+    res.status(200).json({
+      message: "Wishlist fetched successfully",
+      page,
+      limit,
+      totalPages: Math.ceil(totalItems / limit),
+      totalItems,
+      wishList,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

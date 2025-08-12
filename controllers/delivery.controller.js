@@ -1,4 +1,5 @@
 import { Order } from "../models/order.model.js";
+import { ReturnOrder } from "../models/returnOrder.model.js";
 import { User } from "../models/user.model.js";
 
 
@@ -150,29 +151,29 @@ export const assignDeliveryAgent = async (req, res) => {
 
 export const assignPickUpAgent = async (req, res) => {
   try {
-    const { orderId, pickUpAgentId } = req.body;
+    const { returnOrderId, pickUpAgentId } = req.body;
 
-    if (!orderId || !pickUpAgentId) {
-      return res.status(400).json({ success: false, message: "Order ID and Pick Up Agent ID are required" });
+    if (!returnOrderId || !pickUpAgentId) {
+      return res.status(400).json({ success: false, message: "Return Order ID and Pick Up Agent ID are required" });
     }
 
-    const order = await Order.findById(orderId);
-    if (!order) {
-      return res.status(404).json({ success: false, message: "Order not found" });
+    const returnOrder = await ReturnOrder.findById(returnOrderId);
+    if (!returnOrder) {
+      return res.status(404).json({ success: false, message: "Return Order not found" });
     }
 
-    if (order.returnRequest.status !== 'Approved') {
+    if (returnOrder.status !== 'Approved') {
       return res.status(400).json({ success: false, message: "Return request is not approved" });
     }
 
-    if (order.returnRequest.pickUpAgent === pickUpAgentId) {
+    if (returnOrder.pickUpAgent === pickUpAgentId) {
       return res.status(400).json({ success: false, message: "Pick Up Agent already assigned to this order" });
     }
 
-    order.returnRequest.pickUpAgent = pickUpAgentId;
-    await order.save();
+    returnOrder.pickUpAgent = pickUpAgentId;
+    await returnOrder.save();
 
-    res.status(200).json({ success: true, message: "Pick Up Agent assigned", order });
+    res.status(200).json({ success: true, message: "Pick Up Agent assigned", returnOrder });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -182,31 +183,48 @@ export const getAssignedOrders = async (req, res) => {
   try {
     const { agentId } = req.params;
 
-    const filter = {
-      $or: [
-        { deliveryAgent: agentId, status: { $in: ['Pending', 'Processing', 'Shipped'] } },
-        { "returnRequest.pickUpAgent": agentId, "returnRequest.status": { $in: ['Requested', 'Approved'] } },
-      ]
-    };
-
-
-    const orders = await Order.find(filter)
+    // Fetch delivery orders
+    const deliveryOrders = await Order.find({
+      deliveryAgent: agentId,
+      status: { $in: ['Pending', 'Processing', 'Shipped'] }
+    })
       .populate('user', 'name email phoneNumber')
       .lean();
 
-    const mappedOrders = orders.map(order => {
-      if (order.deliveryAgent?.toString() === agentId.toString()) {
-        return { ...order, taskType: 'Delivery' };
-      } else if (order.returnRequest?.pickUpAgent?.toString() === agentId.toString()) {
-        return { ...order, taskType: 'Pickup' };
-      }
+    const mappedDelivery = deliveryOrders.map(order => ({
+      ...order,
+      taskType: 'Delivery'
+    }));
+
+    // Fetch pickup return orders
+    const pickupOrders = await ReturnOrder.find({
+      pickUpAgent: agentId,
+      status: { $in: ['Requested', 'Approved'] }
+    })
+      .populate('user', 'name email phoneNumber')
+      .lean();
+
+    const mappedPickup = pickupOrders.map(order => ({
+      ...order,
+      taskType: 'Pickup'
+    }));
+
+    const assignedOrders = [...mappedDelivery, ...mappedPickup];
+
+    res.status(200).json({
+      success: true,
+      message: "Assigned orders fetched successfully",
+      data: assignedOrders
     });
 
-    res.status(200).json({ success: true, message: "Assigned Orders fetched successfully", data: mappedOrders });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
-}
+};
+
 
 
 export const addDeliveryNotes = async (req, res) => {

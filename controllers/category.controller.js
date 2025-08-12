@@ -3,15 +3,32 @@ import { Category } from '../models/category.model.js';
 // Get all categories
 export const getCategories = async (req, res) => {
   try {
-    const { name } = req.query; // Extract 'name' from query parameters
+    const { name, status } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
 
     const filter = {};
     if (name) {
       filter.name = { $regex: name, $options: 'i' }; // Add name to filter for case-insensitive partial match
     }
 
-    const categories = await Category.find(filter); // Apply the filter to the query
-    res.json(categories);
+    if (status) {
+      filter.status = status;
+    }
+
+    const totalItems = await Category.countDocuments(filter);
+    if (totalItems === 0) {
+      return res.status(404).json({ message: 'No categories found' });
+    }
+    const categories = await Category.find(filter).skip(skip).limit(limit).sort({ createdAt: -1 });
+    res.json({
+      page,
+      limit,
+      totalPages: Math.ceil(totalItems / limit),
+      totalItems,
+      categories
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

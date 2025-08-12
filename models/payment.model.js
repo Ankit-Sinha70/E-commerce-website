@@ -11,7 +11,6 @@ const paymentSchema = new Schema({
         type: mongoose.Schema.Types.ObjectId, 
         ref: 'User' 
     },
-    guestId: { type: String },
     email: { type: String, required: true },
 
     amount: { type: Number, required: true },
@@ -22,8 +21,8 @@ const paymentSchema = new Schema({
         enum: ['Pending', 'Paid', 'Failed', 'Refunded'],
         default: 'Pending'
     },
-    paymentMethod: { type: String }, 
-    gateway: { type: String }, 
+    paymentMethod: { type: String }, // card, upi
+    gateway: { type: String }, // stripe, razorpay
     sessionId: { type: String },
 
     receiptUrl: { type: String },
