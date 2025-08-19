@@ -1,22 +1,21 @@
-import express from 'express';
-import { protect,isAdmin,session } from "../middlewares/authmiddleware.js"
+import express from "express";
 import {
   createProduct,
-  getProducts,
-  getProductById,
-  updateProduct,
   deleteProduct,
-} from '../controllers/product.controller.js';
+  getProductById,
+  getProducts,
+  updateProduct,
+} from "../controllers/product.controller.js";
+import { isAdmin } from "../middlewares/authmiddleware.js";
 
-import upload from '../middlewares/upload.js';
+import upload from "../middlewares/upload.js";
 
 const router = express.Router();
 
-router.post('/create',isAdmin, upload.single('image'), createProduct);
-router.get('/list', getProducts);
-router.get('/single/:id'  , getProductById);
-router.put('/update/:id' ,isAdmin,upload.single('image'), updateProduct);
-router.delete('/delete/:id',isAdmin, deleteProduct);
+router.post("/create", isAdmin, upload.single("image"), createProduct);
+router.get("/list", getProducts);
+router.get("/single/:id", getProductById);
+router.put("/update/:id", isAdmin, upload.single("image"), updateProduct);
+router.delete("/delete/:id", isAdmin, deleteProduct);
 
 export default router;
-  

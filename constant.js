@@ -1,1 +1,1 @@
-export const DB_NAME = "naturalIce"
+export const DB_NAME = "Trendiya"
