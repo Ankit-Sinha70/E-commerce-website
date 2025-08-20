@@ -23,6 +23,9 @@ import notificationRoutes from "./routes/notification.route.js";
 
 const app = express();
 
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 app.use(
   "/api/payment/stripe-webhook",
   express.raw({ type: "application/json" }),
@@ -37,9 +40,6 @@ app.use(
   })
 );
 app.use(cookieParser());
-app.use(express.urlencoded({ extended: true }));
-
-app.use(express.json());
 // Route prefix
 app.use("/api/product", productRoutes);
 app.use("/api/category", categoryRoutes);

@@ -47,7 +47,6 @@ export async function sendNotificationToUser(userId, notification) {
 
   if (socketId) {
     io.to(socketId).emit('new_notification', notification);
-    console.log('Sent notification to', userId);
   } else {
     console.log('User offline, skip WebSocket');
   }

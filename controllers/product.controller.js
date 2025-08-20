@@ -1,42 +1,22 @@
-import { Product } from "../models/product.model.js";
 import { cloudinary } from "../utils/cloudinary.js";
-import { Category } from "../models/category.model.js";
+import Category from "../models/category.model.js";
+import Product from "../models/product.model.js"
 
 // Create a new product
 export const createProduct = async (req, res) => {
   try {
-    const image = req.file.path;
-    const { name, price, description, stock, category } = req.body;
+    const { name, price, description, category } = req.body;
 
-    const status = await Category.findOne({ _id: category });
+    const newProduct = new Product({
+      name,
+      price,
+      description,
+      category,
+      image: req.file ? req.file.path : null,
+    });
 
-    if (!status) {
-      return res.status(400).json({ message: "Category does not exist" });
-    }
-
-    const productExists = await Product.findOne({ name });
-    if (productExists) {
-      return res.status(400).json({ message: "Product already exists" });
-    }
-
-    if (status.status === "Active") {
-      const product = new Product({
-        name,
-        price,
-        description,
-        stock,
-        image,
-        category,
-      });
-
-      const savedProduct = await product.save();
-      return res.status(201).json({
-        message: "Product created successfully",
-        product: savedProduct,
-      });
-    } else {
-      return res.status(400).json({ message: "Category is not active" });
-    }
+    await newProduct.save();
+    res.status(201).json(newProduct);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -70,7 +50,7 @@ export const getProducts = async (req, res) => {
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    let query = Product.find(filter).populate("category");
+    let query = Product.find(filter).populate("category", "name");
     if (sortBy) {
       query = query.sort(sortBy);
     }
@@ -96,11 +76,10 @@ export const getProducts = async (req, res) => {
 // Get single product by ID
 export const getProductById = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id);
-    if (!product) return res.status(404).json({ message: "Product not found" });
-    res.json(product);
+    const products = await Product.find().populate("category", "name"); 
+    res.json(products);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ error: error.message });
   }
 };
 

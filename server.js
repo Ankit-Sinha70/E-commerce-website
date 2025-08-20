@@ -25,7 +25,6 @@ export const io = new Server(server, {
 io.on("connection", (socket) => {
   socket.on("register", (userId) => {
     userSocketMap.set(userId, socket.id);
-    console.log(`User ${userId} registered with socket ${socket.id}`);
   });
 
   socket.on("disconnect", () => {
@@ -35,7 +34,6 @@ io.on("connection", (socket) => {
         break;
       }
     }
-    console.log("User disconnected:", socket.id);
   });
 });
 

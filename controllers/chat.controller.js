@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { Product } from '../models/product.model.js';
+import  Product  from '../models/product.model.js';
 import dotenv from 'dotenv';
 dotenv.config();
 

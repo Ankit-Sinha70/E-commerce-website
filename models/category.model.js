@@ -1,24 +1,42 @@
-import mongoose, {Schema } from "mongoose";
-const categorySchema = new Schema({
-    name:{
-        type:String,
-        required: true,
-        lowercase: true,
-        trim: true, 
-    },
-    description:{
-        type:String,
-        required:true,
-        lowercase:true,
-    },
-    status:{
-        type:String,
-        enum:['Active','Inactive'],
-    },
-},
-{timestamps:true}
-)
+import mongoose from "mongoose";
 
+const categorySchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    description: {
+      type: String,
+      default: "",
+    },
+    image: {
+      type: String,
+      default: "",
+    },
+    parentCategory: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      default: null,
+    },
+    status: {
+      type: String,
+      enum: ["Active", "Inactive"],
+      default: "Active",
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+  },
+  { timestamps: true }
+);
 
+// Unique per (name + parentCategory), case-insensitive
+categorySchema.index(
+  { name: 1, parentCategory: 1 },
+  { unique: true, collation: { locale: "en", strength: 2 } }
+);
 
-export const Category = mongoose.model("Category",categorySchema)
+export default mongoose.model("Category", categorySchema);
