@@ -11,6 +11,7 @@ import receiptRoutes from "./routes/receipt.route.js";
 import orderRoutes from "./routes/order.route.js";
 import deliveryRoutes from "./routes/delivery.route.js";
 import productReviewRoutes from "./routes/ProductReview.route.js";
+import subcategoryRoutes from "./routes/subcategory.route.js";
 
 import wishListRoutes from "./routes/wishList.route.js";
 import shippingAddressRoutes from "./routes/shippingAddressRoutes.js";
@@ -43,6 +44,7 @@ app.use(cookieParser());
 // Route prefix
 app.use("/api/product", productRoutes);
 app.use("/api/category", categoryRoutes);
+app.use("/api/subcategory", subcategoryRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/productlist", productlistRoutes);
 app.use("/api/review", productReviewRoutes);

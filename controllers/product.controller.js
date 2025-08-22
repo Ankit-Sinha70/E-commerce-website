@@ -1,24 +1,64 @@
 import { cloudinary } from "../utils/cloudinary.js";
-import Category from "../models/category.model.js";
-import Product from "../models/product.model.js"
+import Product from "../models/product.model.js";
+import Subcategory from "../models/subcategory.model.js";
 
 // Create a new product
 export const createProduct = async (req, res) => {
   try {
-    const { name, price, description, category } = req.body;
+    const { name, originalPrice, discountPrice, description, subcategory } =
+      req.body;
 
-    const newProduct = new Product({
+    // Validate required fields
+    if (!name || !originalPrice || !discountPrice || !subcategory) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Please provide all required fields (name, originalPrice, discountPrice, subcategory)",
+        });
+    }
+
+    // Validate subcategory and derive category
+    const sub = await Subcategory.findById(subcategory).populate("category", "status");
+    if (!sub) {
+      return res.status(400).json({ success: false, message: "Subcategory not found" });
+    }
+    if (sub.status === "Inactive") {
+      return res.status(400).json({ success: false, message: "Cannot add product to an Inactive subcategory" });
+    }
+
+    // Ensure originalPrice > discountPrice
+    if (Number(originalPrice) <= Number(discountPrice)) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Original price must be greater than discount price",
+        });
+    }
+
+    const product = new Product({
       name,
-      price,
+      originalPrice,
+      discountPrice,
       description,
-      category,
-      image: req.file ? req.file.path : null,
+      subcategory: sub._id,
+      category: sub.category._id || sub.category, // ensured by pre-validate too
+      image: req.file ? (req.file.secure_url || req.file.path) : null,
+      images: req.file ? [req.file.secure_url || req.file.path] : [],
     });
 
-    await newProduct.save();
-    res.status(201).json(newProduct);
+    const createdProduct = await product.save();
+
+    res.status(201).json({
+      success: true,
+      message: "Product created successfully",
+      data: createdProduct,
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server Error", error: error.message });
   }
 };
 
@@ -27,6 +67,7 @@ export const getProducts = async (req, res) => {
   try {
     const {
       category,
+      subcategory,
       name,
       minPrice,
       maxPrice,
@@ -36,12 +77,9 @@ export const getProducts = async (req, res) => {
     } = req.query;
 
     const filter = {};
-    if (category) {
-      filter.category = category;
-    }
-    if (name) {
-      filter.name = { $regex: name, $options: "i" };
-    }
+    if (subcategory) filter.subcategory = subcategory;
+    if (category) filter.category = category;
+    if (name) filter.name = { $regex: name, $options: "i" };
     if (minPrice || maxPrice) {
       filter.price = {};
       if (minPrice) filter.price.$gte = Number(minPrice);
@@ -50,66 +88,158 @@ export const getProducts = async (req, res) => {
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    let query = Product.find(filter).populate("category", "name");
-    if (sortBy) {
-      query = query.sort(sortBy);
-    }
+    let query = Product.find(filter).populate("subcategory", "name").populate("category", "name");
+    if (sortBy) query = query.sort(sortBy);
 
     query = query.skip(skip).limit(Number(limit));
 
     const products = await query;
-
     const total = await Product.countDocuments(filter);
 
     res.json({
+      success: true,
+      message: "Products fetched successfully",
       page: Number(page),
       pages: Math.ceil(total / Number(limit)),
       total,
       count: products.length,
-      products,
+      data: products,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Get single product by ID
+// Get Best Deal Products
+export const getBestDeals = async (req, res) => {
+  try {
+    const products = await Product.find({});
+
+    const bestDeals = products
+      .map((product) => {
+        const discountPercentage = Math.round(
+          ((product.originalPrice - product.discountPrice) /
+            product.originalPrice) *
+            100
+        );
+        return { ...product._doc, discountPercentage };
+      })
+      .sort((a, b) => b.discountPercentage - a.discountPercentage)
+      .slice(0, 10);
+
+    res.json({
+      success: true,
+      message: "Best deals fetched successfully",
+      data: bestDeals,
+    });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ success: false, message: "Server Error", error: error.message });
+  }
+};
+
+// Get single product by ID + related products
 export const getProductById = async (req, res) => {
   try {
-    const products = await Product.find().populate("category", "name"); 
-    res.json(products);
+    const product = await Product.findById(req.params.id)
+      .populate("subcategory", "name")
+      .populate("category", "name");
+
+    if (!product) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
+    }
+
+    const relatedProducts = await Product.find({
+      category: product.category?._id || product.category,
+      _id: { $ne: product._id },
+    })
+      .limit(4)
+      .populate("subcategory", "name").populate("category", "name");
+
+    const discountPercentage = Math.round(
+      ((product.originalPrice - product.discountPrice) /
+        product.originalPrice) *
+        100
+    );
+
+    res.json({
+      success: true,
+      message: "Product fetched successfully",
+      data: {
+        product,
+        relatedProducts,
+        discountPercentage,
+      },
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
 // Update product by ID
 export const updateProduct = async (req, res) => {
   try {
-    const { name, price, description, stock, category } = req.body;
+    const { name, originalPrice, discountPrice, description, subcategory } =
+      req.body;
     const product = await Product.findById(req.params.id);
-    if (!product) return res.status(404).json({ message: "Product not found" });
 
-    if (req.file) {
-      const oldImageUrl = product.image;
-      const publicIdMatch = oldImageUrl.match(/\/([^/]+)\.[a-z]+$/);
-      if (publicIdMatch) {
-        const publicId = `natural_ice/${publicIdMatch[1]}`;
-        await cloudinary.uploader.destroy(publicId);
-      }
-      product.image = req.file.path;
+    if (!product) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
     }
 
+    // Update fields
     product.name = name || product.name;
-    product.price = price || product.price;
+    product.originalPrice = originalPrice || product.originalPrice;
+    product.discountPrice = discountPrice || product.discountPrice;
     product.description = description || product.description;
-    product.stock = stock || product.stock;
-    product.category = category || product.category;
 
-    const updated = await product.save();
-    res.status(200).json(updated);
+    if (subcategory) {
+      const sub = await Subcategory.findById(subcategory).populate("category", "status");
+      if (!sub) {
+        return res.status(400).json({ success: false, message: "Subcategory not found" });
+      }
+      if (sub.status === "Inactive") {
+        return res.status(400).json({ success: false, message: "Cannot move product to an Inactive subcategory" });
+      }
+      product.subcategory = sub._id;
+      product.category = sub.category._id || sub.category;
+    }
+
+    product.image = req.file
+    ? (req.file.secure_url || req.file.path)
+    : product.image;
+  
+  if (req.file) {
+    // Keep images array in sync if you want
+    if (!Array.isArray(product.images)) product.images = [];
+    product.images[0] = req.file.secure_url || req.file.path;
+  }
+
+    if (Number(product.originalPrice) <= Number(product.discountPrice)) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Original price must be greater than discount price",
+        });
+    }
+
+    const updatedProduct = await product.save();
+
+    res.json({
+      success: true,
+      message: "Product updated successfully",
+      data: updatedProduct,
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res
+      .status(500)
+      .json({ success: false, message: "Server Error", error: error.message });
   }
 };
 
@@ -117,7 +247,10 @@ export const updateProduct = async (req, res) => {
 export const deleteProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
-    if (!product) return res.status(404).json({ message: "Product not found" });
+    if (!product)
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
 
     if (product.image) {
       const publicIdMatch = product.image.match(/\/([^/]+)\.[a-z]+$/);
@@ -128,8 +261,9 @@ export const deleteProduct = async (req, res) => {
     }
 
     await product.deleteOne();
-    res.json({ message: "Product deleted successfully" });
+
+    res.json({ success: true, message: "Product deleted successfully" });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
