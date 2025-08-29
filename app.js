@@ -12,15 +12,15 @@ import orderRoutes from "./routes/order.route.js";
 import deliveryRoutes from "./routes/delivery.route.js";
 import productReviewRoutes from "./routes/ProductReview.route.js";
 import subcategoryRoutes from "./routes/subcategory.route.js";
-
 import wishListRoutes from "./routes/wishList.route.js";
 import shippingAddressRoutes from "./routes/shippingAddressRoutes.js";
-
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { stripeWebhookHandler } from "./controllers/stripe.controller.js";
 import { protect } from "./middlewares/authmiddleware.js";
 import notificationRoutes from "./routes/notification.route.js";
+import passport from "passport";
+import authRoutes from "./routes/auth.routes.js"
 
 const app = express();
 
@@ -41,6 +41,7 @@ app.use(
   })
 );
 app.use(cookieParser());
+app.use(passport.initialize());
 // Route prefix
 app.use("/api/product", productRoutes);
 app.use("/api/category", categoryRoutes);
@@ -58,5 +59,6 @@ app.use("/api/order", orderRoutes);
 app.use("/api", shippingAddressRoutes);
 app.use("/api/notifications", protect, notificationRoutes);
 app.use("/api/delivery", deliveryRoutes);
+app.use("/api/auth", authRoutes);
 
 export { app };

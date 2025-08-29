@@ -63,6 +63,7 @@ export const createProduct = async (req, res) => {
 };
 
 // Get all products
+// ...existing code...
 export const getProducts = async (req, res) => {
   try {
     const {
@@ -74,6 +75,7 @@ export const getProducts = async (req, res) => {
       sortBy,
       page = 1,
       limit = 20,
+      priceField = "originalPrice",
     } = req.query;
 
     const filter = {};
@@ -81,9 +83,10 @@ export const getProducts = async (req, res) => {
     if (category) filter.category = category;
     if (name) filter.name = { $regex: name, $options: "i" };
     if (minPrice || maxPrice) {
-      filter.price = {};
-      if (minPrice) filter.price.$gte = Number(minPrice);
-      if (maxPrice) filter.price.$lte = Number(maxPrice);
+      // ensure we filter on the actual numeric price field
+      filter[priceField] = {};
+      if (minPrice) filter[priceField].$gte = Number(minPrice);
+      if (maxPrice) filter[priceField].$lte = Number(maxPrice);
     }
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -113,19 +116,59 @@ export const getProducts = async (req, res) => {
 // Get Best Deal Products
 export const getBestDeals = async (req, res) => {
   try {
-    const products = await Product.find({});
-
-    const bestDeals = products
-      .map((product) => {
-        const discountPercentage = Math.round(
-          ((product.originalPrice - product.discountPrice) /
-            product.originalPrice) *
-            100
-        );
-        return { ...product._doc, discountPercentage };
-      })
-      .sort((a, b) => b.discountPercentage - a.discountPercentage)
-      .slice(0, 10);
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0, private");
+    const bestDeals = await Product.aggregate([
+      {
+        $addFields: {
+          originalPriceNum: { $toDouble: "$originalPrice" },
+          discountPriceNum: { $toDouble: "$discountPrice" },
+        },
+      },
+      {
+        $addFields: {
+          discountPercentage: {
+            $cond: [
+              { $gt: ["$originalPriceNum", 0] },
+              {
+                $round: [
+                  {
+                    $multiply: [
+                      {
+                        $divide: [
+                          { $subtract: ["$originalPriceNum", "$discountPriceNum"] },
+                          "$originalPriceNum",
+                        ],
+                      },
+                      100,
+                    ],
+                  },
+                  0,
+                ],
+              },
+              0,
+            ],
+          },
+        },
+      },
+      { $sort: { discountPercentage: -1 } },
+      { $limit: 10 },
+      // project fields as needed (exclude internal fields if required)
+      {
+        $project: {
+          name: 1,
+          brand: 1,
+          category: 1,
+          subcategory: 1,
+          image: 1,
+          images: 1,
+          originalPrice: 1,
+          discountPrice: 1,
+          discountPercentage: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+    ]);
 
     res.json({
       success: true,

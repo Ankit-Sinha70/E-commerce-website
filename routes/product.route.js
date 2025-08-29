@@ -1,4 +1,3 @@
-// No changes required in this file for routing paths. Ensure client sends `subcategory` in body for create/update.
 import express from "express";
 import {
   createProduct,
@@ -9,7 +8,6 @@ import {
   updateProduct,
 } from "../controllers/product.controller.js";
 import { isAdmin } from "../middlewares/authmiddleware.js";
-
 import upload from "../middlewares/upload.js";
 
 const router = express.Router();
