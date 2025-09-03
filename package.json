@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon server.js",
+      "build": "vite build",
     "migrate:backfill": "node ./scripts/backfillSubcategories.js"
   },
   "keywords": [],
