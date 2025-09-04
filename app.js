@@ -37,6 +37,7 @@ const corsOrigin = process.env.CORS_ORIGIN?.split(",");
 app.use(
   cors({
     origin: corsOrigin,
+    credentials: true,
   })
 );
 app.use(cookieParser());
