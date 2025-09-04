@@ -168,7 +168,7 @@ export const getBestDeals = async (req, res) => {
           updatedAt: 1,
         },
       },
-    ]);
+    ], { maxTimeMS: 30000 });
 
     res.json({
       success: true,
