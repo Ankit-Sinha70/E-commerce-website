@@ -91,7 +91,7 @@ export const getProducts = async (req, res) => {
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    let query = Product.find(filter).populate("subcategory", "name").populate("category", "name");
+    let query = Product.find(filter).populate("subcategory", "name").populate("category", "name").maxTimeMS(30000);
     if (sortBy) query = query.sort(sortBy);
 
     query = query.skip(skip).limit(Number(limit));
